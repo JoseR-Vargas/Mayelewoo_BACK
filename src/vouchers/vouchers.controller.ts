@@ -5,7 +5,7 @@ import { CreateVoucherDto } from './dto/create-voucher.dto';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
-@Controller('api/vouchers')
+@Controller('vouchers')
 export class VouchersController {
   constructor(private readonly vouchersService: VouchersService) {}
 

@@ -5,7 +5,7 @@ import { CreateContadorDto } from './dto/create-contador.dto';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 
-@Controller('api/contadores')
+@Controller('contadores')
 export class ContadoresController {
   constructor(private readonly contadoresService: ContadoresService) {}
 
