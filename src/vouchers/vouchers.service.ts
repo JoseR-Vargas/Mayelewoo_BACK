@@ -32,15 +32,11 @@ export class VouchersService {
     const transformedVoucher = voucher.toObject ? voucher.toObject() : voucher;
     if (transformedVoucher.fotos && Array.isArray(transformedVoucher.fotos) && transformedVoucher.fotos.length > 0) {
       // Construir URLs completas para las imágenes
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-      // En producción, usar la URL de Render
-      const finalBaseUrl = process.env.NODE_ENV === 'production' && !baseUrl.includes('localhost') 
-        ? 'https://mayelewoo-back.onrender.com' 
-        : baseUrl;
+      const baseUrl = process.env.BASE_URL || 'https://mayelewoo-back.onrender.com';
       
       transformedVoucher.files = transformedVoucher.fotos.map((foto: string) => ({
         name: foto,
-        url: `${finalBaseUrl}/uploads/vouchers/${foto}`
+        url: `${baseUrl}/uploads/vouchers/${foto}`
       }));
     }
     return transformedVoucher;

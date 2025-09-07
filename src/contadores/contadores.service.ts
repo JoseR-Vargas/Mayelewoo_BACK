@@ -42,12 +42,8 @@ export class ContadoresService {
     const transformedContador = contador.toObject ? contador.toObject() : contador;
     if (transformedContador.fotoMedidor) {
       // Construir la URL completa para la imagen
-      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-      // En producción, usar la URL de Render
-      const finalBaseUrl = process.env.NODE_ENV === 'production' && !baseUrl.includes('localhost') 
-        ? 'https://mayelewoo-back.onrender.com' 
-        : baseUrl;
-      transformedContador.fotoMedidor = `${finalBaseUrl}/uploads/contadores/${transformedContador.fotoMedidor}`;
+      const baseUrl = process.env.BASE_URL || 'https://mayelewoo-back.onrender.com';
+      transformedContador.fotoMedidor = `${baseUrl}/uploads/contadores/${transformedContador.fotoMedidor}`;
     }
     return transformedContador;
   }
