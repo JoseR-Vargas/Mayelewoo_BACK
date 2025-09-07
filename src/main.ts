@@ -23,17 +23,9 @@ async function bootstrap() {
     }
   });
   
-  // Configurar CORS - Restringir orígenes en producción
-  const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? [
-        'https://mayelewoo.onrender.com',
-        'https://mayelewoo-front.onrender.com',
-        'https://your-frontend-domain.com' // Reemplaza con tu dominio real
-      ]
-    : true; // Permitir todos en desarrollo
-
+  // Configurar CORS - Temporalmente permisivo para debugging
   app.enableCors({
-    origin: allowedOrigins,
+    origin: true, // Permitir todos los orígenes temporalmente
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
