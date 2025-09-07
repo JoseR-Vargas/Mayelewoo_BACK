@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, ValidationPipe, Param, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, ValidationPipe, Param, Query, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ContadoresService } from './contadores.service';
 import { CreateContadorDto } from './dto/create-contador.dto';
@@ -26,14 +26,29 @@ export class ContadoresController {
     @Body() body: any,
     @UploadedFile() file: any
   ) {
+    // Validar campos requeridos manualmente para FormData
+    const errors: string[] = [];
+    
+    if (!body.dni || !body.dni.trim()) errors.push('DNI es requerido');
+    if (!body.nombre || !body.nombre.trim()) errors.push('Nombre es requerido');
+    if (!body.apellidos || !body.apellidos.trim()) errors.push('Apellidos es requerido');
+    if (!body.habitacion || !body.habitacion.trim()) errors.push('Habitación es requerida');
+    if (!body.numeroMedidor || !body.numeroMedidor.trim()) errors.push('Número de medidor es requerido');
+    if (!body.lecturaActual || isNaN(parseFloat(body.lecturaActual))) errors.push('Lectura actual debe ser un número válido');
+    if (!body.lecturaAnterior || isNaN(parseFloat(body.lecturaAnterior))) errors.push('Lectura anterior debe ser un número válido');
+
+    if (errors.length > 0) {
+      throw new BadRequestException(errors.join(', '));
+    }
+
     const createContadorDto: CreateContadorDto = {
-      dni: body.dni,
-      nombre: body.nombre,
-      apellidos: body.apellidos || body.apellido,
-      habitacion: body.habitacion || body.nroApartamento,
-      numeroMedidor: body.numeroMedidor,
-      lecturaActual: parseFloat(body.lecturaActual || body.numeroMedicion),
-      lecturaAnterior: parseFloat(body.lecturaAnterior || '0'),
+      dni: body.dni.trim(),
+      nombre: body.nombre.trim(),
+      apellidos: body.apellidos.trim(),
+      habitacion: body.habitacion.trim(),
+      numeroMedidor: body.numeroMedidor.trim(),
+      lecturaActual: parseFloat(body.lecturaActual),
+      lecturaAnterior: parseFloat(body.lecturaAnterior),
       fechaLectura: new Date(body.fechaLectura || body.timestamp || new Date()),
       fotoMedidor: file ? file.filename : undefined,
       observaciones: body.observaciones || ''
