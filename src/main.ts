@@ -8,8 +8,10 @@ import { join } from 'path';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   
-  // Configurar prefijo global para las rutas API
-  app.setGlobalPrefix('api');
+  // Configurar prefijo global para las rutas API, excluyendo uploads
+  app.setGlobalPrefix('api', {
+    exclude: ['/uploads/*']
+  });
   
   // Configurar límites de body parser para archivos grandes
   app.use(bodyParser.json({ limit: '10mb' }));
