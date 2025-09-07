@@ -24,15 +24,32 @@ export class ContadoresService {
   }
 
   async findAll(): Promise<Contador[]> {
-    return this.contadorModel.find().sort({ createdAt: -1 });
+    const contadores = await this.contadorModel.find().sort({ createdAt: -1 });
+    return contadores.map(contador => this.transformContadorWithImageUrl(contador));
   }
 
   async findByHabitacion(habitacion: string): Promise<Contador[]> {
-    return this.contadorModel.find({ habitacion }).sort({ createdAt: -1 });
+    const contadores = await this.contadorModel.find({ habitacion }).sort({ createdAt: -1 });
+    return contadores.map(contador => this.transformContadorWithImageUrl(contador));
   }
 
   async findByDni(dni: string): Promise<Contador[]> {
-    return this.contadorModel.find({ dni }).sort({ createdAt: -1 });
+    const contadores = await this.contadorModel.find({ dni }).sort({ createdAt: -1 });
+    return contadores.map(contador => this.transformContadorWithImageUrl(contador));
+  }
+
+  private transformContadorWithImageUrl(contador: any): any {
+    const transformedContador = contador.toObject ? contador.toObject() : contador;
+    if (transformedContador.fotoMedidor) {
+      // Construir la URL completa para la imagen
+      const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+      // En producción, usar la URL de Render
+      const finalBaseUrl = process.env.NODE_ENV === 'production' && !baseUrl.includes('localhost') 
+        ? 'https://mayelewoo-back.onrender.com' 
+        : baseUrl;
+      transformedContador.fotoMedidor = `${finalBaseUrl}/uploads/contadores/${transformedContador.fotoMedidor}`;
+    }
+    return transformedContador;
   }
 
   async getDashboardStats() {

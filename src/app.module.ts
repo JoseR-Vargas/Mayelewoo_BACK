@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { ContadoresModule } from './contadores/contadores.module';
+import { VouchersModule } from './vouchers/vouchers.module';
 import { AuthService } from './auth/auth.service';
 import { databaseConfig } from './config/database.config';
 
@@ -21,6 +22,7 @@ import { databaseConfig } from './config/database.config';
     }),
     AuthModule,
     ContadoresModule,
+    VouchersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
