@@ -45,8 +45,7 @@ async function bootstrap() {
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5000',
   'http://127.0.0.1:5500',
-    'https://mayelewoo.netlify.app',
-    'https://mayelewoo.vercel.app',
+  'https://hostalmayelewoo.netlify.app',
     'https://mayelewoo.github.io',
     process.env.FRONTEND_URL || 'https://mayelewoo.com' // URL del frontend en producción
   ].filter(Boolean);
