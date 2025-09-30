@@ -37,6 +37,27 @@ export class Voucher {
 
   @Prop({ default: 'pendiente' })
   estado: string;
+
+  // Almacenamiento interno de imágenes (en lugar de filesystem)
+  @Prop({
+    type: [
+      {
+        filename: { type: String, required: true },
+        mimeType: { type: String, required: true },
+        size: { type: Number, required: true },
+        data: { type: Buffer, required: true },
+        uploadedAt: { type: Date, default: Date.now }
+      }
+    ],
+    default: []
+  })
+  imagenes?: Array<{
+    filename: string;
+    mimeType: string;
+    size: number;
+    data: Buffer;
+    uploadedAt: Date;
+  }>;
 }
 
 export const VoucherSchema = SchemaFactory.createForClass(Voucher);

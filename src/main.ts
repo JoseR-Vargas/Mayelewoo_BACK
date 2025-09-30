@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import * as bodyParser from 'body-parser';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -17,8 +18,16 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: '10mb' }));
   app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
   
-  // Configurar archivos estáticos para las imágenes
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  // Asegurar carpeta uploads en runtime root (soporta dist y ts-node)
+  const uploadsPath = join(process.cwd(), 'uploads');
+  if (!existsSync(uploadsPath)) {
+    mkdirSync(uploadsPath, { recursive: true });
+    mkdirSync(join(uploadsPath, 'vouchers'), { recursive: true });
+    mkdirSync(join(uploadsPath, 'contadores'), { recursive: true });
+  }
+
+  // Configurar archivos estáticos para las imágenes (usar process.cwd para evitar problemas en dist)
+  app.useStaticAssets(uploadsPath, {
     prefix: '/uploads/',
     setHeaders: (res, path, stat) => {
       res.set('Access-Control-Allow-Origin', '*');
@@ -28,9 +37,22 @@ async function bootstrap() {
     }
   });
   
-  // Configurar CORS - Temporalmente permisivo para debugging
+  // Configurar CORS de forma segura para producción
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5000',
+  'http://localhost:5500',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5000',
+  'http://127.0.0.1:5500',
+    'https://mayelewoo.netlify.app',
+    'https://mayelewoo.vercel.app',
+    'https://mayelewoo.github.io',
+    process.env.FRONTEND_URL || 'https://mayelewoo.com' // URL del frontend en producción
+  ].filter(Boolean);
+
   app.enableCors({
-    origin: true, // Permitir todos los orígenes temporalmente
+    origin: process.env.NODE_ENV === 'development' ? true : allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],

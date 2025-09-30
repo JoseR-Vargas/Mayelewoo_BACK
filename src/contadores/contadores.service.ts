@@ -11,17 +11,36 @@ export class ContadoresService {
   ) {}
 
   async create(createContadorDto: CreateContadorDto): Promise<Contador> {
-    // Calcular el consumo
-    const consumo = createContadorDto.lecturaActual - createContadorDto.lecturaAnterior;
-    
-    const createdContador = new this.contadorModel({
-      ...createContadorDto,
-      consumo,
-      estado: 'activo'
-    });
-
+    // Simplemente guardar los datos tal como vienen del formulario
+    const createdContador = new this.contadorModel(createContadorDto);
     return createdContador.save();
   }
+
+  async createWithImage(createContadorDto: CreateContadorDto, file?: any): Promise<any> {
+    let fotoMedidorData: {
+      filename: string;
+      mimeType: string;
+      size: number;
+      data: Buffer;
+      uploadedAt: Date;
+    } | undefined = undefined;
+    if (file) {
+      fotoMedidorData = {
+        filename: file.originalname?.split(/\s+/).join('_') || file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        data: file.buffer,
+        uploadedAt: new Date()
+      };
+    }
+    const created = new this.contadorModel({
+      ...createContadorDto,
+      fotoMedidorData,
+    });
+    await created.save();
+    return this.transformContadorWithImageUrl(created);
+  }
+
 
   async findAll(): Promise<Contador[]> {
     const contadores = await this.contadorModel.find().sort({ createdAt: -1 });
@@ -39,31 +58,35 @@ export class ContadoresService {
   }
 
   private transformContadorWithImageUrl(contador: any): any {
-    const transformedContador = contador.toObject ? contador.toObject() : contador;
-    if (transformedContador.fotoMedidor) {
-      // Construir la URL completa para la imagen
-      const baseUrl = process.env.BASE_URL || 'https://mayelewoo-back.onrender.com';
-      transformedContador.fotoMedidor = `${baseUrl}/uploads/contadores/${transformedContador.fotoMedidor}`;
+    const transformed = contador.toObject ? contador.toObject() : contador;
+    let baseUrl = (process.env.BASE_URL || '').trim();
+    if (!baseUrl) baseUrl = `http://localhost:${process.env.PORT || 3000}`;
+    baseUrl = baseUrl.replace(/\/$/, '');
+
+    // Legacy filesystem
+    if (transformed.fotoMedidor && !transformed.fotoMedidorData) {
+      transformed.fotoMedidor = `${baseUrl}/uploads/contadores/${transformed.fotoMedidor}`;
     }
-    return transformedContador;
+
+    // Nueva versión embebida: entregar URL relativa para frontend agnóstico
+    if (transformed.fotoMedidorData && transformed.fotoMedidorData.filename) {
+      transformed.fotoMedidor = `/api/contadores/${transformed._id}/foto/${encodeURIComponent(transformed.fotoMedidorData.filename)}`;
+    }
+    return transformed;
   }
 
   async getDashboardStats() {
     const totalRegistros = await this.contadorModel.countDocuments();
-    const consumoTotal = await this.contadorModel.aggregate([
-      { $group: { _id: null, total: { $sum: '$consumo' } } }
-    ]);
-
-    const consumoPorHabitacion = await this.contadorModel.aggregate([
+    
+    const registrosPorHabitacion = await this.contadorModel.aggregate([
       {
         $group: {
           _id: '$habitacion',
-          totalConsumo: { $sum: '$consumo' },
-          ultimaLectura: { $max: '$fechaLectura' },
-          registros: { $sum: 1 }
+          totalRegistros: { $sum: 1 },
+          ultimaLectura: { $max: '$fechaLectura' }
         }
       },
-      { $sort: { totalConsumo: -1 } }
+      { $sort: { totalRegistros: -1 } }
     ]);
 
     const lecturasMensuales = await this.contadorModel.aggregate([
@@ -73,8 +96,7 @@ export class ContadoresService {
             year: { $year: '$fechaLectura' },
             month: { $month: '$fechaLectura' }
           },
-          lecturas: { $sum: 1 },
-          consumoTotal: { $sum: '$consumo' }
+          lecturas: { $sum: 1 }
         }
       },
       { $sort: { '_id.year': -1, '_id.month': -1 } },
@@ -83,29 +105,27 @@ export class ContadoresService {
 
     return {
       totalRegistros,
-      consumoTotal: consumoTotal[0]?.total || 0,
-      consumoPorHabitacion,
+      registrosPorHabitacion,
       lecturasMensuales
     };
   }
 
   async getContadoresLuzStats() {
     const lecturas = await this.contadorModel.find()
-      .select('habitacion nombre apellidos lecturaActual lecturaAnterior consumo fechaLectura numeroMedidor')
+      .select('habitacion nombre apellidos numeroMedicion fechaLectura numeroMedidor')
       .sort({ fechaLectura: -1 })
       .limit(50);
 
     const habitacionesActivas = await this.contadorModel.distinct('habitacion');
-    
-    const consumoPromedio = await this.contadorModel.aggregate([
-      { $group: { _id: null, promedio: { $avg: '$consumo' } } }
-    ]);
 
     return {
       lecturas,
       totalHabitaciones: habitacionesActivas.length,
-      consumoPromedio: consumoPromedio[0]?.promedio || 0,
       ultimasLecturas: lecturas.slice(0, 10)
     };
+  }
+
+  async findById(id: string): Promise<ContadorDocument | null> {
+    return this.contadorModel.findById(id).exec();
   }
 }

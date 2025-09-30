@@ -23,11 +23,8 @@ export class Contador {
   @Prop({ required: true })
   numeroMedidor: string;
 
-  @Prop({ required: true, type: Number })
-  lecturaActual: number;
-
-  @Prop({ required: true, type: Number })
-  lecturaAnterior: number;
+  @Prop({ required: true, type: String })
+  numeroMedicion: string;
 
   @Prop({ required: true })
   fechaLectura: Date;
@@ -35,11 +32,27 @@ export class Contador {
   @Prop({ required: false })
   fotoMedidor?: string;
 
+  // Nuevo almacenamiento binario opcional
+  @Prop({
+    type: {
+      filename: { type: String },
+      mimeType: { type: String },
+      size: { type: Number },
+      data: { type: Buffer },
+      uploadedAt: { type: Date, default: Date.now }
+    },
+    required: false
+  })
+  fotoMedidorData?: {
+    filename: string;
+    mimeType: string;
+    size: number;
+    data: Buffer;
+    uploadedAt: Date;
+  };
+
   @Prop({ required: false })
   observaciones?: string;
-
-  @Prop({ type: Number, default: 0 })
-  consumo: number;
 
   @Prop({ default: 'activo' })
   estado: string;

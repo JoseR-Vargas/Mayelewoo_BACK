@@ -1,9 +1,9 @@
-import { Controller, Get, Post, Body, ValidationPipe, Param, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Body, ValidationPipe, Param, UseInterceptors, UploadedFiles, Res, NotFoundException } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { VouchersService } from './vouchers.service';
 import { CreateVoucherDto } from './dto/create-voucher.dto';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
+import type { Response } from 'express';
 
 @Controller('vouchers')
 export class VouchersController {
@@ -11,16 +11,8 @@ export class VouchersController {
 
   @Post()
   @UseInterceptors(FilesInterceptor('files', 10, {
-    storage: diskStorage({
-      destination: './uploads/vouchers',
-      filename: (req, file, cb) => {
-        const randomName = Array(32).fill(null).map(() => (Math.round(Math.random() * 16)).toString(16)).join('');
-        return cb(null, `${randomName}${extname(file.originalname)}`);
-      },
-    }),
-    limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB total
-    },
+    storage: memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 },
   }))
   async create(
     @Body() body: any,
@@ -39,15 +31,28 @@ export class VouchersController {
       hab: body.hab,
       monto: monto,
       timestamp: new Date(body.timestamp || new Date()),
-      fotos: files ? files.map(file => file.filename) : []
+      fotos: [] // deprecated para almacenamiento en DB
     };
 
-    const voucher = await this.vouchersService.create(createVoucherDto);
+    const voucher = await this.vouchersService.createWithImages(createVoucherDto, files || []);
     return {
       success: true,
       message: 'Voucher registrado exitosamente',
       data: voucher
     };
+  }
+
+  @Get(":id/image/:filename")
+  async getImage(
+    @Param('id') id: string,
+    @Param('filename') filename: string,
+    @Res() res: Response
+  ) {
+    const file = await this.vouchersService.findImage(id, filename);
+    if (!file) throw new NotFoundException('Imagen no encontrada');
+    res.setHeader('Content-Type', file.mimeType);
+    res.setHeader('Content-Length', file.size.toString());
+    res.send(file.data);
   }
 
   @Get()
