@@ -153,19 +153,19 @@ export class CalculosMedidorController {
    */
   @Get(':id/foto-anterior')
   async getFotoAnterior(@Param('id') id: string, @Res() res: Response) {
-    const foto = await this.calculosMedidorService.getFotoAnterior(id);
-    
-    if (!foto) {
+    const resource = await this.calculosMedidorService.getFotoAnteriorResource(id);
+    if (!resource) {
       throw new NotFoundException('Foto de medición anterior no encontrada');
     }
 
-    res.set({
-      'Content-Type': foto.mimeType,
-      'Content-Length': foto.data.length,
-      'Cache-Control': 'public, max-age=31536000',
-    });
-
-    res.send(foto.data);
+    res.set({ 'Content-Type': resource.mimeType, 'Cache-Control': 'public, max-age=31536000' });
+    if (resource.type === 'gridfs') {
+      resource.stream.on('error', () => res.status(404).end());
+      resource.stream.pipe(res);
+    } else {
+      res.set({ 'Content-Length': resource.data.length });
+      res.send(resource.data);
+    }
   }
 
   /**
@@ -173,19 +173,19 @@ export class CalculosMedidorController {
    */
   @Get(':id/foto-actual')
   async getFotoActual(@Param('id') id: string, @Res() res: Response) {
-    const foto = await this.calculosMedidorService.getFotoActual(id);
-    
-    if (!foto) {
+    const resource = await this.calculosMedidorService.getFotoActualResource(id);
+    if (!resource) {
       throw new NotFoundException('Foto de medición actual no encontrada');
     }
 
-    res.set({
-      'Content-Type': foto.mimeType,
-      'Content-Length': foto.data.length,
-      'Cache-Control': 'public, max-age=31536000',
-    });
-
-    res.send(foto.data);
+    res.set({ 'Content-Type': resource.mimeType, 'Cache-Control': 'public, max-age=31536000' });
+    if (resource.type === 'gridfs') {
+      resource.stream.on('error', () => res.status(404).end());
+      resource.stream.pipe(res);
+    } else {
+      res.set({ 'Content-Length': resource.data.length });
+      res.send(resource.data);
+    }
   }
 
   /**

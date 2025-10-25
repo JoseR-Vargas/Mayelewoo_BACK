@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
+import { GridFSBucket, ObjectId } from 'mongodb';
 import { CalculoMedidor, CalculoMedidorDocument } from './schemas/calculo-medidor.schema';
 import { CreateCalculoMedidorDto } from './dto/create-calculo-medidor.dto';
 
@@ -8,7 +9,23 @@ import { CreateCalculoMedidorDto } from './dto/create-calculo-medidor.dto';
 export class CalculosMedidorService {
   constructor(
     @InjectModel(CalculoMedidor.name) private calculoMedidorModel: Model<CalculoMedidorDocument>,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
+
+  private getBucket(): GridFSBucket {
+    // Non-null assertion because connection.db is set when Mongoose is connected
+    return new GridFSBucket(this.connection.db as any, { bucketName: 'calculosMedidor' });
+  }
+
+  private async uploadToGridFS(buffer: Buffer, filename: string, contentType?: string): Promise<ObjectId> {
+    const bucket = this.getBucket();
+    return new Promise<ObjectId>((resolve, reject) => {
+      const uploadStream = bucket.openUploadStream(filename, { contentType });
+      uploadStream.on('error', reject);
+      uploadStream.on('finish', (file) => resolve(file._id));
+      uploadStream.end(buffer);
+    });
+  }
 
   /**
    * Crea un nuevo cálculo de medidor con imágenes opcionales
@@ -35,31 +52,47 @@ export class CalculosMedidorService {
     } | undefined = undefined;
 
     // Procesar foto anterior si existe
+    let fotoAnteriorFileId: ObjectId | undefined;
     if (fotoAnterior) {
+      // Subir a GridFS y guardar solo metadatos en el documento
+      fotoAnteriorFileId = await this.uploadToGridFS(
+        fotoAnterior.buffer,
+        fotoAnterior.originalname?.split(/\s+/).join('_') || fotoAnterior.originalname,
+        fotoAnterior.mimetype
+      );
       fotoAnteriorData = {
         filename: fotoAnterior.originalname?.split(/\s+/).join('_') || fotoAnterior.originalname,
         mimeType: fotoAnterior.mimetype,
         size: fotoAnterior.size,
-        data: fotoAnterior.buffer,
+        data: undefined as any, // no almacenar el buffer en el doc
         uploadedAt: new Date()
-      };
+      } as any;
     }
 
     // Procesar foto actual si existe
+    let fotoActualFileId: ObjectId | undefined;
     if (fotoActual) {
+      // Subir a GridFS y guardar solo metadatos en el documento
+      fotoActualFileId = await this.uploadToGridFS(
+        fotoActual.buffer,
+        fotoActual.originalname?.split(/\s+/).join('_') || fotoActual.originalname,
+        fotoActual.mimetype
+      );
       fotoActualData = {
         filename: fotoActual.originalname?.split(/\s+/).join('_') || fotoActual.originalname,
         mimeType: fotoActual.mimetype,
         size: fotoActual.size,
-        data: fotoActual.buffer,
+        data: undefined as any,
         uploadedAt: new Date()
-      };
+      } as any;
     }
 
     const created = new this.calculoMedidorModel({
       ...createCalculoMedidorDto,
       fotoAnteriorData,
       fotoActualData,
+      fotoAnteriorFileId,
+      fotoActualFileId,
     });
 
     await created.save();
@@ -108,29 +141,51 @@ export class CalculosMedidorService {
   /**
    * Obtiene la imagen de la medición anterior
    */
-  async getFotoAnterior(id: string): Promise<{ data: Buffer; mimeType: string } | null> {
+  async getFotoAnteriorResource(id: string): Promise<
+    | { type: 'gridfs'; stream: NodeJS.ReadableStream; mimeType: string }
+    | { type: 'buffer'; data: Buffer; mimeType: string }
+    | null
+  > {
     const calculo = await this.calculoMedidorModel.findById(id);
-    if (!calculo || !calculo.fotoAnteriorData) {
-      return null;
+    if (!calculo) return null;
+
+    // Si existe archivo en GridFS
+    if (calculo.fotoAnteriorFileId) {
+      const bucket = this.getBucket();
+  const stream = bucket.openDownloadStream(new ObjectId(calculo.fotoAnteriorFileId as any));
+      const mime = calculo.fotoAnteriorData?.mimeType || 'application/octet-stream';
+      return { type: 'gridfs', stream, mimeType: mime };
     }
-    return {
-      data: calculo.fotoAnteriorData.data,
-      mimeType: calculo.fotoAnteriorData.mimeType
-    };
+
+    // Fallback a buffer embebido (compatibilidad)
+    if (calculo.fotoAnteriorData?.data) {
+      return { type: 'buffer', data: calculo.fotoAnteriorData.data as any, mimeType: calculo.fotoAnteriorData.mimeType };
+    }
+    return null;
   }
 
   /**
    * Obtiene la imagen de la medición actual
    */
-  async getFotoActual(id: string): Promise<{ data: Buffer; mimeType: string } | null> {
+  async getFotoActualResource(id: string): Promise<
+    | { type: 'gridfs'; stream: NodeJS.ReadableStream; mimeType: string }
+    | { type: 'buffer'; data: Buffer; mimeType: string }
+    | null
+  > {
     const calculo = await this.calculoMedidorModel.findById(id);
-    if (!calculo || !calculo.fotoActualData) {
-      return null;
+    if (!calculo) return null;
+
+    if (calculo.fotoActualFileId) {
+      const bucket = this.getBucket();
+  const stream = bucket.openDownloadStream(new ObjectId(calculo.fotoActualFileId as any));
+      const mime = calculo.fotoActualData?.mimeType || 'application/octet-stream';
+      return { type: 'gridfs', stream, mimeType: mime };
     }
-    return {
-      data: calculo.fotoActualData.data,
-      mimeType: calculo.fotoActualData.mimeType
-    };
+
+    if (calculo.fotoActualData?.data) {
+      return { type: 'buffer', data: calculo.fotoActualData.data as any, mimeType: calculo.fotoActualData.mimeType };
+    }
+    return null;
   }
 
   /**

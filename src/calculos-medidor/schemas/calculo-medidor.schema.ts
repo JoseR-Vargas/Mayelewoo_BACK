@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type CalculoMedidorDocument = CalculoMedidor & Document;
 
@@ -57,6 +57,10 @@ export class CalculoMedidor {
     uploadedAt: Date;
   };
 
+  // GridFS file id para foto anterior (si se usa almacenamiento en GridFS)
+  @Prop({ type: Types.ObjectId, ref: 'calculosMedidor.files' })
+  fotoAnteriorFileId?: Types.ObjectId;
+
   // Foto de medición actual
   @Prop({
     type: {
@@ -75,6 +79,10 @@ export class CalculoMedidor {
     data: Buffer;
     uploadedAt: Date;
   };
+
+  // GridFS file id para foto actual (si se usa almacenamiento en GridFS)
+  @Prop({ type: Types.ObjectId, ref: 'calculosMedidor.files' })
+  fotoActualFileId?: Types.ObjectId;
 
   @Prop({ type: Number })
   timestamp?: number;
