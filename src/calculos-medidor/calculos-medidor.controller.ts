@@ -9,7 +9,9 @@ import {
   UploadedFiles, 
   BadRequestException, 
   Res, 
-  NotFoundException 
+  NotFoundException,
+  InternalServerErrorException,
+  Logger
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { CalculosMedidorService } from './calculos-medidor.service';
@@ -19,6 +21,8 @@ import type { Response } from 'express';
 
 @Controller('calculos-medidor')
 export class CalculosMedidorController {
+  private readonly logger = new Logger(CalculosMedidorController.name);
+  
   constructor(private readonly calculosMedidorService: CalculosMedidorService) {}
 
   /**
@@ -31,67 +35,80 @@ export class CalculosMedidorController {
     { name: 'fotoActual', maxCount: 1 }
   ], {
     storage: memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB por archivo
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB por archivo (se comprimirán automáticamente)
   }))
   async create(
     @Body() body: any,
     @UploadedFiles() files: { fotoAnterior?: any[], fotoActual?: any[] }
   ) {
-    // Validar campos requeridos
-    const errors: string[] = [];
-    
-    if (!body.nombre || !body.nombre.trim()) errors.push('Nombre es requerido');
-    if (!body.apellido || !body.apellido.trim()) errors.push('Apellido es requerido');
-    if (!body.dni || !body.dni.trim()) errors.push('DNI es requerido');
-    if (!body.habitacion || !body.habitacion.trim()) errors.push('Habitación es requerida');
-    if (!body.medicionAnterior || isNaN(parseFloat(body.medicionAnterior))) errors.push('Medición anterior es requerida');
-    if (!body.medicionActual || isNaN(parseFloat(body.medicionActual))) errors.push('Medición actual es requerida');
-    if (!body.consumoCalculado || isNaN(parseFloat(body.consumoCalculado))) errors.push('Consumo calculado es requerido');
-    if (!body.montoTotal || isNaN(parseFloat(body.montoTotal))) errors.push('Monto total es requerido');
-    if (!body.precioKWH || isNaN(parseFloat(body.precioKWH))) errors.push('Precio por kWh es requerido');
+    try {
+      // Validar campos requeridos
+      const errors: string[] = [];
+      
+      if (!body.nombre || !body.nombre.trim()) errors.push('Nombre es requerido');
+      if (!body.apellido || !body.apellido.trim()) errors.push('Apellido es requerido');
+      if (!body.dni || !body.dni.trim()) errors.push('DNI es requerido');
+      if (!body.habitacion || !body.habitacion.trim()) errors.push('Habitación es requerida');
+      if (!body.medicionAnterior || isNaN(parseFloat(body.medicionAnterior))) errors.push('Medición anterior es requerida');
+      if (!body.medicionActual || isNaN(parseFloat(body.medicionActual))) errors.push('Medición actual es requerida');
+      if (!body.consumoCalculado || isNaN(parseFloat(body.consumoCalculado))) errors.push('Consumo calculado es requerido');
+      if (!body.montoTotal || isNaN(parseFloat(body.montoTotal))) errors.push('Monto total es requerido');
+      if (!body.precioKWH || isNaN(parseFloat(body.precioKWH))) errors.push('Precio por kWh es requerido');
 
-    if (errors.length > 0) {
-      throw new BadRequestException(errors.join(', '));
+      if (errors.length > 0) {
+        throw new BadRequestException(errors.join(', '));
+      }
+
+      // Validar que la medición actual sea mayor a la anterior
+      const medicionAnterior = parseFloat(body.medicionAnterior);
+      const medicionActual = parseFloat(body.medicionActual);
+      
+      if (medicionActual <= medicionAnterior) {
+        throw new BadRequestException('La medición actual debe ser mayor a la medición anterior');
+      }
+
+      // Crear el DTO
+      const createCalculoMedidorDto: CreateCalculoMedidorDto = {
+        nombre: body.nombre.trim(),
+        apellido: body.apellido.trim(),
+        dni: body.dni.trim(),
+        habitacion: body.habitacion.trim(),
+        medicionAnterior: medicionAnterior,
+        medicionActual: medicionActual,
+        consumoCalculado: parseFloat(body.consumoCalculado),
+        montoTotal: parseFloat(body.montoTotal),
+        precioKWH: parseFloat(body.precioKWH),
+        fechaRegistro: new Date(body.fechaRegistro || new Date()),
+        timestamp: body.timestamp ? parseInt(body.timestamp) : Date.now(),
+      };
+
+      // Extraer archivos si existen
+      const fotoAnterior = files?.fotoAnterior?.[0];
+      const fotoActual = files?.fotoActual?.[0];
+
+      const calculo = await this.calculosMedidorService.create(
+        createCalculoMedidorDto,
+        fotoAnterior,
+        fotoActual
+      );
+
+      return {
+        success: true,
+        message: 'Cálculo de medidor registrado exitosamente',
+        data: calculo
+      };
+    } catch (error) {
+      // Si es un error de validación (BadRequestException), lo relanzamos
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      
+      // Para cualquier otro error, loguear y mostrar mensaje genérico
+      this.logger.error('Error al procesar solicitud de cálculo de medidor', error);
+      throw new InternalServerErrorException(
+        'No se pudo procesar su solicitud. Intente nuevamente en unos minutos.'
+      );
     }
-
-    // Validar que la medición actual sea mayor a la anterior
-    const medicionAnterior = parseFloat(body.medicionAnterior);
-    const medicionActual = parseFloat(body.medicionActual);
-    
-    if (medicionActual <= medicionAnterior) {
-      throw new BadRequestException('La medición actual debe ser mayor a la medición anterior');
-    }
-
-    // Crear el DTO
-    const createCalculoMedidorDto: CreateCalculoMedidorDto = {
-      nombre: body.nombre.trim(),
-      apellido: body.apellido.trim(),
-      dni: body.dni.trim(),
-      habitacion: body.habitacion.trim(),
-      medicionAnterior: medicionAnterior,
-      medicionActual: medicionActual,
-      consumoCalculado: parseFloat(body.consumoCalculado),
-      montoTotal: parseFloat(body.montoTotal),
-      precioKWH: parseFloat(body.precioKWH),
-      fechaRegistro: new Date(body.fechaRegistro || new Date()),
-      timestamp: body.timestamp ? parseInt(body.timestamp) : Date.now(),
-    };
-
-    // Extraer archivos si existen
-    const fotoAnterior = files?.fotoAnterior?.[0];
-    const fotoActual = files?.fotoActual?.[0];
-
-    const calculo = await this.calculosMedidorService.create(
-      createCalculoMedidorDto,
-      fotoAnterior,
-      fotoActual
-    );
-
-    return {
-      success: true,
-      message: 'Cálculo de medidor registrado exitosamente',
-      data: calculo
-    };
   }
 
   /**

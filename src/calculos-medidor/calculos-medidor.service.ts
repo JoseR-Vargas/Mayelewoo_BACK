@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { GridFSBucket, ObjectId } from 'mongodb';
 import { CalculoMedidor, CalculoMedidorDocument } from './schemas/calculo-medidor.schema';
 import { CreateCalculoMedidorDto } from './dto/create-calculo-medidor.dto';
+import * as sharpModule from 'sharp';
+const sharp = sharpModule.default || sharpModule;
 
 @Injectable()
 export class CalculosMedidorService {
+  private readonly logger = new Logger(CalculosMedidorService.name);
+
   constructor(
     @InjectModel(CalculoMedidor.name) private calculoMedidorModel: Model<CalculoMedidorDocument>,
     @InjectConnection() private readonly connection: Connection,
@@ -22,9 +26,52 @@ export class CalculosMedidorService {
     return new Promise<ObjectId>((resolve, reject) => {
       const uploadStream = bucket.openUploadStream(filename, { contentType });
       uploadStream.on('error', reject);
-      uploadStream.on('finish', (file) => resolve(file._id));
+      uploadStream.on('finish', () => {
+        // El ID se obtiene del uploadStream, no del callback
+        resolve(uploadStream.id as ObjectId);
+      });
       uploadStream.end(buffer);
     });
+  }
+
+  /**
+   * Comprime una imagen para reducir su tamaño
+   * Convierte a JPEG y optimiza el tamaño manteniendo calidad aceptable
+   */
+  private async compressImage(buffer: Buffer, originalMimeType: string): Promise<{ buffer: Buffer; size: number; mimeType: string }> {
+    try {
+      const originalSize = buffer.length;
+      this.logger.log(`Comprimiendo imagen. Tamaño original: ${(originalSize / 1024 / 1024).toFixed(2)} MB`);
+
+      // Comprimir imagen con sharp
+      let compressedBuffer = await sharp(buffer)
+        .rotate() // Auto-rotar basado en EXIF
+        .resize(1920, 1920, { // Máximo 1920px en cualquier dimensión
+          fit: 'inside',
+          withoutEnlargement: true
+        })
+        .jpeg({ quality: 80 }) // Convertir a JPEG con calidad 80%
+        .toBuffer();
+
+      const compressedSize = compressedBuffer.length;
+      const reduction = ((1 - compressedSize / originalSize) * 100).toFixed(2);
+      
+      this.logger.log(`Imagen comprimida. Tamaño final: ${(compressedSize / 1024 / 1024).toFixed(2)} MB. Reducción: ${reduction}%`);
+
+      return {
+        buffer: compressedBuffer,
+        size: compressedSize,
+        mimeType: 'image/jpeg'
+      };
+    } catch (error) {
+      this.logger.error('Error al comprimir imagen, usando original', error);
+      // Si falla la compresión, devolver el original
+      return {
+        buffer,
+        size: buffer.length,
+        mimeType: originalMimeType
+      };
+    }
   }
 
   /**
@@ -54,16 +101,19 @@ export class CalculosMedidorService {
     // Procesar foto anterior si existe
     let fotoAnteriorFileId: ObjectId | undefined;
     if (fotoAnterior) {
+      // Comprimir imagen antes de subir
+      const compressed = await this.compressImage(fotoAnterior.buffer, fotoAnterior.mimetype);
+      
       // Subir a GridFS y guardar solo metadatos en el documento
       fotoAnteriorFileId = await this.uploadToGridFS(
-        fotoAnterior.buffer,
+        compressed.buffer,
         fotoAnterior.originalname?.split(/\s+/).join('_') || fotoAnterior.originalname,
-        fotoAnterior.mimetype
+        compressed.mimeType
       );
       fotoAnteriorData = {
         filename: fotoAnterior.originalname?.split(/\s+/).join('_') || fotoAnterior.originalname,
-        mimeType: fotoAnterior.mimetype,
-        size: fotoAnterior.size,
+        mimeType: compressed.mimeType,
+        size: compressed.size,
         data: undefined as any, // no almacenar el buffer en el doc
         uploadedAt: new Date()
       } as any;
@@ -72,16 +122,19 @@ export class CalculosMedidorService {
     // Procesar foto actual si existe
     let fotoActualFileId: ObjectId | undefined;
     if (fotoActual) {
+      // Comprimir imagen antes de subir
+      const compressed = await this.compressImage(fotoActual.buffer, fotoActual.mimetype);
+      
       // Subir a GridFS y guardar solo metadatos en el documento
       fotoActualFileId = await this.uploadToGridFS(
-        fotoActual.buffer,
+        compressed.buffer,
         fotoActual.originalname?.split(/\s+/).join('_') || fotoActual.originalname,
-        fotoActual.mimetype
+        compressed.mimeType
       );
       fotoActualData = {
         filename: fotoActual.originalname?.split(/\s+/).join('_') || fotoActual.originalname,
-        mimeType: fotoActual.mimetype,
-        size: fotoActual.size,
+        mimeType: compressed.mimeType,
+        size: compressed.size,
         data: undefined as any,
         uploadedAt: new Date()
       } as any;
