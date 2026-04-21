@@ -2,7 +2,6 @@ import { Module, OnModuleInit } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { ContadoresModule } from './contadores/contadores.module';
 import { VouchersModule } from './vouchers/vouchers.module';
@@ -27,7 +26,6 @@ import { databaseConfig } from './config/database.config';
     CalculosMedidorModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule implements OnModuleInit {
   constructor(private authService: AuthService) {}
